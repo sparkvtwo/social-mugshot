@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#111111" />
+  <title>Social Mugshot</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --black: #0d0d0d;
+      --white: #f5f5f0;
+      --accent: #e8c84a;
+      --red: #c0392b;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--black);
+      color: var(--white);
+      font-family: 'Courier New', Courier, monospace;
+      overflow-x: hidden;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100svh;
+      padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
+    }
+
+    header {
+      width: 100%;
+      text-align: center;
+      padding: 20px 16px 12px;
+      border-bottom: 2px solid #333;
+    }
+
+    header h1 {
+      font-size: clamp(22px, 7vw, 34px);
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    header p {
+      font-size: 12px;
+      letter-spacing: 3px;
+      color: #888;
+      margin-top: 4px;
+      text-transform: uppercase;
+    }
+
+    main {
+      flex: 1;
+      width: 100%;
+      max-width: 480px;
+      padding: 24px 20px 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    /* ---- preview ---- */
+    #preview-wrapper {
+      width: 100%;
+      aspect-ratio: 4/5;
+      border: 3px solid #333;
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+      background: #1a1a1a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #preview-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      color: #555;
+    }
+
+    #preview-placeholder svg {
+      width: 64px;
+      height: 64px;
+      opacity: 0.5;
+    }
+
+    #preview-placeholder span {
+      font-size: 13px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    #preview-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+    }
+
+    /* ---- file input (hidden, triggered via button) ---- */
+    #file-input {
+      display: none;
+    }
+
+    /* ---- buttons ---- */
+    .btn {
+      width: 100%;
+      padding: 18px;
+      border: none;
+      border-radius: 4px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 16px;
+      font-weight: bold;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .btn:active { transform: scale(0.98); opacity: 0.85; }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--black);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--white);
+      border: 2px solid #444;
+    }
+
+    .btn-danger {
+      background: var(--red);
+      color: var(--white);
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* ---- submit area ---- */
+    #submit-area {
+      width: 100%;
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* ---- status ---- */
+    #status {
+      width: 100%;
+      text-align: center;
+      font-size: 14px;
+      letter-spacing: 2px;
+      color: #888;
+      min-height: 20px;
+    }
+
+    /* ---- confirmation screen ---- */
+    #confirmation {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+      width: 100%;
+      text-align: center;
+      padding: 40px 0;
+    }
+
+    #confirmation .badge {
+      font-size: 72px;
+    }
+
+    #confirmation h2 {
+      font-size: clamp(24px, 8vw, 40px);
+      letter-spacing: 4px;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+
+    #confirmation p {
+      font-size: 14px;
+      letter-spacing: 2px;
+      color: #888;
+      line-height: 1.8;
+    }
+
+    #confirmation .booking-info {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 16px 24px;
+      width: 100%;
+    }
+
+    #confirmation .booking-info span {
+      display: block;
+      font-size: 13px;
+      letter-spacing: 2px;
+      color: #aaa;
+    }
+
+    #confirmation .booking-info strong {
+      font-size: 20px;
+      letter-spacing: 4px;
+      color: var(--accent);
+    }
+
+    /* ---- progress bar ---- */
+    #progress-bar {
+      display: none;
+      width: 100%;
+      height: 4px;
+      background: #222;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    #progress-fill {
+      height: 100%;
+      background: var(--accent);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Social</h1>
+    <p>Police Department</p>
+  </header>
+
+  <main>
+    <!-- UPLOAD FORM -->
+    <form id="upload-form" style="width:100%; display:flex; flex-direction:column; align-items:center; gap:20px;">
+
+      <div id="preview-wrapper">
+        <div id="preview-placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
+          </svg>
+          <span>Your mugshot here</span>
+        </div>
+        <img id="preview-img" alt="Preview" />
+      </div>
+
+      <input type="file" id="file-input" name="photo" accept="image/*" capture="user" />
+
+      <div id="progress-bar"><div id="progress-fill"></div></div>
+
+      <div id="status"></div>
+
+      <!-- Initial: just the camera button -->
+      <button type="button" class="btn btn-primary" id="camera-btn">
+        Take Mugshot Photo
+      </button>
+
+      <!-- After photo selected: submit + retake -->
+      <div id="submit-area">
+        <button type="submit" class="btn btn-danger" id="submit-btn">
+          Book 'em
+        </button>
+        <button type="button" class="btn btn-secondary" id="retake-btn">
+          Retake
+        </button>
+      </div>
+
+    </form>
+
+    <!-- CONFIRMATION (shown after successful upload) -->
+    <div id="confirmation">
+      <div class="badge">🚔</div>
+      <h2>You're Booked!</h2>
+      <p>Your mugshot is now on display.<br/>Check the screen.</p>
+      <div class="booking-info">
+        <span>Booking Number</span>
+        <strong id="conf-booking">#------</strong>
+      </div>
+      <button class="btn btn-secondary" id="another-btn">
+        Another Round?
+      </button>
+    </div>
+  </main>
+
+  <script>
+    const fileInput = document.getElementById('file-input');
+    const cameraBtn = document.getElementById('camera-btn');
+    const previewImg = document.getElementById('preview-img');
+    const previewPlaceholder = document.getElementById('preview-placeholder');
+    const submitArea = document.getElementById('submit-area');
+    const submitBtn = document.getElementById('submit-btn');
+    const retakeBtn = document.getElementById('retake-btn');
+    const uploadForm = document.getElementById('upload-form');
+    const confirmation = document.getElementById('confirmation');
+    const status = document.getElementById('status');
+    const progressBar = document.getElementById('progress-bar');
+    const progressFill = document.getElementById('progress-fill');
+    const anotherBtn = document.getElementById('another-btn');
+    const confBooking = document.getElementById('conf-booking');
+
+    cameraBtn.addEventListener('click', () => fileInput.click());
+    retakeBtn.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        previewImg.src = e.target.result;
+        previewImg.style.display = 'block';
+        previewPlaceholder.style.display = 'none';
+        cameraBtn.style.display = 'none';
+        submitArea.style.display = 'flex';
+        status.textContent = '';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    uploadForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      submitBtn.disabled = true;
+      retakeBtn.disabled = true;
+      status.textContent = 'Processing...';
+      progressBar.style.display = 'block';
+
+      // Animate progress bar indeterminately
+      let prog = 0;
+      const progInterval = setInterval(() => {
+        prog = Math.min(prog + Math.random() * 8, 85);
+        progressFill.style.width = prog + '%';
+      }, 200);
+
+      const formData = new FormData();
+      formData.append('photo', file);
+
+      try {
+        const res = await fetch('/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        clearInterval(progInterval);
+
+        if (data.success) {
+          progressFill.style.width = '100%';
+          setTimeout(() => {
+            // Show confirmation
+            uploadForm.style.display = 'none';
+            confirmation.style.display = 'flex';
+            if (data.imageUrl) {
+              // Extract booking from URL not needed — server returns bookingNum if we update API
+            }
+          }, 400);
+        } else {
+          throw new Error(data.error || 'Upload failed');
+        }
+      } catch (err) {
+        clearInterval(progInterval);
+        progressBar.style.display = 'none';
+        progressFill.style.width = '0%';
+        status.textContent = 'Error: ' + (err.message || 'Something went wrong. Try again.');
+        submitBtn.disabled = false;
+        retakeBtn.disabled = false;
+      }
+    });
+
+    anotherBtn.addEventListener('click', () => {
+      // Reset everything
+      fileInput.value = '';
+      previewImg.src = '';
+      previewImg.style.display = 'none';
+      previewPlaceholder.style.display = 'flex';
+      cameraBtn.style.display = 'block';
+      submitArea.style.display = 'none';
+      progressBar.style.display = 'none';
+      progressFill.style.width = '0%';
+      status.textContent = '';
+      submitBtn.disabled = false;
+      retakeBtn.disabled = false;
+      confirmation.style.display = 'none';
+      uploadForm.style.display = 'flex';
+    });
+  </script>
+</body>
+</html>

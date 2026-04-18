@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Social — Mugshot Display</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --black: #0a0a0a;
+      --white: #f0f0eb;
+      --accent: #e8c84a;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--black);
+      color: var(--white);
+      font-family: 'Courier New', Courier, monospace;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    /* ---- Idle screen ---- */
+    #idle-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      text-align: center;
+      padding: 40px;
+      animation: fadeIn 1s ease;
+    }
+
+    #idle-screen h1 {
+      font-size: clamp(60px, 12vw, 120px);
+      font-weight: bold;
+      letter-spacing: 16px;
+      text-transform: uppercase;
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    #idle-screen .subtitle {
+      font-size: clamp(14px, 2.5vw, 22px);
+      letter-spacing: 8px;
+      text-transform: uppercase;
+      color: #555;
+    }
+
+    #idle-screen .divider {
+      width: 200px;
+      height: 2px;
+      background: #333;
+    }
+
+    #idle-screen .tagline {
+      font-size: clamp(11px, 1.8vw, 16px);
+      letter-spacing: 4px;
+      color: #444;
+      text-transform: uppercase;
+    }
+
+    /* ---- Mugshot display ---- */
+    #mugshot-screen {
+      display: none;
+      width: 100%;
+      height: 100%;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      animation: fadeIn 0.6s ease;
+    }
+
+    #mugshot-img {
+      max-width: 100%;
+      max-height: 100vh;
+      object-fit: contain;
+      display: block;
+      /* subtle vignette */
+      filter: drop-shadow(0 0 60px rgba(0,0,0,0.9));
+    }
+
+    /* ---- Scanline effect for authenticity ---- */
+    #mugshot-screen::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent 0px,
+        transparent 3px,
+        rgba(0,0,0,0.07) 3px,
+        rgba(0,0,0,0.07) 4px
+      );
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* ---- Connection status dot ---- */
+    #conn-dot {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #333;
+      transition: background 0.4s;
+      z-index: 100;
+    }
+
+    #conn-dot.connected { background: #2ecc71; }
+    #conn-dot.error { background: #c0392b; }
+
+    /* ---- Flash effect on new mugshot ---- */
+    #flash {
+      position: fixed;
+      inset: 0;
+      background: white;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 50;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.98); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes flashAnim {
+      0% { opacity: 0.9; }
+      100% { opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Idle screen -->
+  <div id="idle-screen">
+    <h1>Social</h1>
+    <div class="subtitle">Est. &nbsp; 2024</div>
+    <div class="divider"></div>
+    <div class="tagline">Police Department &nbsp;&bull;&nbsp; Mugshot Station</div>
+  </div>
+
+  <!-- Mugshot display -->
+  <div id="mugshot-screen">
+    <img id="mugshot-img" src="" alt="Mugshot" />
+  </div>
+
+  <!-- Flash overlay -->
+  <div id="flash"></div>
+
+  <!-- Connection indicator -->
+  <div id="conn-dot" title="WebSocket status"></div>
+
+  <script>
+    const idleScreen = document.getElementById('idle-screen');
+    const mugshotScreen = document.getElementById('mugshot-screen');
+    const mugshotImg = document.getElementById('mugshot-img');
+    const connDot = document.getElementById('conn-dot');
+    const flashEl = document.getElementById('flash');
+
+    let ws = null;
+    let reconnectTimer = null;
+    let reconnectDelay = 1500;
+
+    function showMugshot(imageUrl) {
+      // Camera flash effect
+      flashEl.style.animation = 'none';
+      flashEl.offsetHeight; // reflow
+      flashEl.style.animation = 'flashAnim 0.6s ease-out forwards';
+
+      // Preload image then show
+      const img = new Image();
+      img.onload = () => {
+        mugshotImg.src = imageUrl;
+        idleScreen.style.display = 'none';
+        mugshotScreen.style.display = 'flex';
+        // Re-trigger animation
+        mugshotScreen.style.animation = 'none';
+        mugshotScreen.offsetHeight;
+        mugshotScreen.style.animation = 'fadeIn 0.6s ease';
+      };
+      img.src = imageUrl;
+    }
+
+    function connect() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${location.host}`;
+      ws = new WebSocket(wsUrl);
+
+      ws.addEventListener('open', () => {
+        connDot.className = 'connected';
+        reconnectDelay = 1500; // reset backoff
+        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      });
+
+      ws.addEventListener('message', (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'new_mugshot') {
+            showMugshot(msg.imageUrl);
+          }
+        } catch {}
+      });
+
+      ws.addEventListener('close', () => {
+        connDot.className = 'error';
+        scheduleReconnect();
+      });
+
+      ws.addEventListener('error', () => {
+        connDot.className = 'error';
+        ws.close();
+      });
+    }
+
+    function scheduleReconnect() {
+      if (reconnectTimer) return;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        reconnectDelay = Math.min(reconnectDelay * 1.5, 15000);
+        connect();
+      }, reconnectDelay);
+    }
+
+    // Prevent screen sleep on supported browsers (kiosk tablets)
+    async function requestWakeLock() {
+      if ('wakeLock' in navigator) {
+        try {
+          await navigator.wakeLock.request('screen');
+        } catch {}
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') requestWakeLock();
+    });
+
+    requestWakeLock();
+    connect();
+  </script>
+</body>
+</html>
