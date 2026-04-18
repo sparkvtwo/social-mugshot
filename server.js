@@ -52,6 +52,13 @@ app.get('/display', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'display.html'));
 });
 
+// ---- Latest mugshot state (for polling) ----
+let latestMugshot = null;
+
+app.get('/latest', (req, res) => {
+  res.json(latestMugshot || { none: true });
+});
+
 app.post('/upload', upload.single('photo'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
@@ -65,19 +72,19 @@ app.post('/upload', upload.single('photo'), async (req, res) => {
     // Clean up tmp upload
     try { fs.unlinkSync(inputPath); } catch {}
 
-    // Broadcast to all display clients
+    // Save latest for polling
     const imageUrl = `/mugshots/${result.outputFilename}`;
-    const message = JSON.stringify({
-      type: 'new_mugshot',
+    latestMugshot = {
       imageUrl,
       bookingNum: result.bookingNum,
-      dateStr: result.dateStr
-    });
+      dateStr: result.dateStr,
+      ts: Date.now()
+    };
 
+    // Broadcast to any WebSocket clients still connected
+    const message = JSON.stringify({ type: 'new_mugshot', ...latestMugshot });
     wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(message);
-      }
+      if (client.readyState === WebSocket.OPEN) client.send(message);
     });
 
     res.json({ success: true, imageUrl });

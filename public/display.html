@@ -176,6 +176,25 @@
     let ws = null;
     let reconnectTimer = null;
     let reconnectDelay = 1500;
+    let lastSeenTs = 0;
+    let pollInterval = null;
+
+    // Polling fallback — checks /latest every 2s
+    function startPolling() {
+      if (pollInterval) return;
+      pollInterval = setInterval(async () => {
+        try {
+          const res = await fetch('/latest');
+          const data = await res.json();
+          if (!data.none && data.ts && data.ts > lastSeenTs) {
+            lastSeenTs = data.ts;
+            showMugshot(data.imageUrl);
+          }
+        } catch {}
+      }, 2000);
+    }
+
+    startPolling(); // always poll regardless of WS
 
     function showMugshot(imageUrl) {
       // Camera flash effect
