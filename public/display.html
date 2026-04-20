@@ -178,11 +178,13 @@
     let reconnectDelay = 1500;
     let lastSeenTs = 0;
     let pollInterval = null;
+    let wsActive = false; // true when WS is open and receiving
 
-    // Polling fallback — checks /latest every 2s
+    // Polling fallback — only used when WebSocket is not active
     function startPolling() {
       if (pollInterval) return;
       pollInterval = setInterval(async () => {
+        if (wsActive) return; // WS is handling it, skip poll
         try {
           const res = await fetch('/latest');
           const data = await res.json();
@@ -194,7 +196,7 @@
       }, 2000);
     }
 
-    startPolling(); // always poll regardless of WS
+    startPolling();
 
     function showMugshot(imageUrl) {
       // Camera flash effect
@@ -222,6 +224,7 @@
       ws = new WebSocket(wsUrl);
 
       ws.addEventListener('open', () => {
+        wsActive = true;
         connDot.className = 'connected';
         reconnectDelay = 1500; // reset backoff
         if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
@@ -231,17 +234,20 @@
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === 'new_mugshot') {
+            lastSeenTs = msg.ts || Date.now(); // keep poll in sync so it won't re-fire
             showMugshot(msg.imageUrl);
           }
         } catch {}
       });
 
       ws.addEventListener('close', () => {
+        wsActive = false;
         connDot.className = 'error';
         scheduleReconnect();
       });
 
       ws.addEventListener('error', () => {
+        wsActive = false;
         connDot.className = 'error';
         ws.close();
       });

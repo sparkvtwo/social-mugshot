@@ -62,20 +62,22 @@ async function processMugshot(inputPath) {
   const outputPath = path.join(MUGSHOT_DIR, outputFilename);
 
   // ── Step 1: Process uploaded photo ──────────────────────────────────────────
-  // Resize to fill the photo area, convert to B&W, high contrast
+  // James Dean 1950s mugshot style: high-contrast B&W, crushed blacks, blown highlights,
+  // warm silver-gelatin tone, heavy film grain.
   const processedRaw = await sharp(inputPath)
     .resize(PHOTO_W, PHOTO_H, { fit: 'cover', position: 'attention' })
     .grayscale()
-    .normalise()
-    .linear(1.45, -35)   // strong contrast boost
-    .gamma(1.12)
-    .sharpen({ sigma: 1.1 })
+    .normalise()           // stretch histogram to full range first
+    .linear(1.75, -55)     // crush the blacks hard, push highlights bright
+    .gamma(0.88)           // slightly brighten midtones (classic press-photo look)
+    .sharpen({ sigma: 1.4, m1: 1.0, m2: 0.4 })  // crisp edges like newspaper halftone
     .raw()
     .ensureAlpha()
     .toBuffer();
 
-  // ── Step 2: Apply film grain via soft-light blend ────────────────────────────
-  const grainBuf = generateGrainBuffer(PHOTO_W, PHOTO_H, 22);
+  // ── Step 2: Apply heavy film grain + warm silver-gelatin tone ────────────────
+  // 1950s film had pronounced grain and a slight warm (sepia-ish) base tone
+  const grainBuf = generateGrainBuffer(PHOTO_W, PHOTO_H, 34); // heavier grain
   const grainRaw = await sharp(grainBuf, {
     raw: { width: PHOTO_W, height: PHOTO_H, channels: 1 }
   }).toBuffer();
@@ -90,8 +92,17 @@ async function processMugshot(inputPath) {
     } else {
       r = base + (2 * g - 1) * (Math.sqrt(Math.max(0, base / 255)) * 255 - base);
     }
-    const c = Math.min(255, Math.max(0, Math.round(r)));
-    blended[i * 4] = c; blended[i * 4 + 1] = c; blended[i * 4 + 2] = c; blended[i * 4 + 3] = 255;
+    const lum = Math.min(255, Math.max(0, Math.round(r)));
+    // Warm silver-gelatin tone: slight warm push in highlights, cool shadows
+    // Highlights → warm (yellowish), shadows stay near-black
+    const warmFactor = lum / 255; // 0 in shadows, 1 in highlights
+    const rOut = Math.min(255, Math.round(lum + warmFactor * 12)); // warm red
+    const gOut = Math.min(255, Math.round(lum + warmFactor * 8));  // warm green
+    const bOut = Math.min(255, Math.round(lum - warmFactor * 6));  // cool blue down
+    blended[i * 4]     = rOut;
+    blended[i * 4 + 1] = gOut;
+    blended[i * 4 + 2] = Math.max(0, bOut);
+    blended[i * 4 + 3] = 255;
   }
 
   const photoBuffer = await sharp(blended, {
