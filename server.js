@@ -53,7 +53,30 @@ app.get('/display', (req, res) => {
 });
 
 // ---- Latest mugshot state (for polling) ----
+// On startup, restore the most recent mugshot from disk so display shows immediately
 let latestMugshot = null;
+(function restoreLatestFromDisk() {
+  const dir = '/tmp/mugshots';
+  try {
+    if (!fs.existsSync(dir)) return;
+    const files = fs.readdirSync(dir)
+      .filter(f => f.endsWith('.jpg'))
+      .map(f => ({ name: f, time: fs.statSync(path.join(dir, f)).mtimeMs }))
+      .sort((a, b) => b.time - a.time);
+    if (files.length > 0) {
+      const latest = files[0];
+      latestMugshot = {
+        imageUrl: `/mugshots/${latest.name}`,
+        bookingNum: '-----',
+        dateStr: new Date(latest.time).toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' }),
+        ts: latest.time
+      };
+      console.log(`Restored latest mugshot from disk: ${latest.name}`);
+    }
+  } catch (e) {
+    console.warn('Could not restore mugshot from disk:', e.message);
+  }
+})();
 
 app.get('/latest', (req, res) => {
   res.json(latestMugshot || { none: true });
